@@ -16,8 +16,7 @@ const corsOptions = {
       'http://localhost:5000',
       'http://localhost:5173',
       'https://pdfpreview-backend.onrender.com',
-      'https://pdfpreview-adobe.vercel.app',
-      process.env.FRONTEND_URL,
+      'https://pdfpreview-adobe.vercel.app'
     ].filter(Boolean);
 
     if (!origin || allowedOrigins.includes(origin)) {
