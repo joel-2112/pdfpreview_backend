@@ -15,18 +15,26 @@ const injectData = async (sourcePath, fieldValues, outputPath) => {
     const pdfBytes = fs.readFileSync(sourcePath);
     const pdfDoc = await PDFDocument.load(pdfBytes, { ignoreEncryption: true });
     
-    // Strip the XFA stream from the Catalog if present to ensure browser compatibility
-    try {
-      const acroForm = pdfDoc.catalog.lookup(PDFName.of('AcroForm'));
-      if (acroForm instanceof PDFDict && acroForm.has(PDFName.of('XFA'))) {
-        acroForm.delete(PDFName.of('XFA'));
-        logger.info('Successfully detected and stripped /XFA reference from standard catalog to enable browser rendering.');
-      }
-    } catch (err) {
-      logger.warn(`Non-blocking warning while stripping XFA from catalog: ${err.message}`);
-    }
-
     const form = pdfDoc.getForm();
+    const acroFields = form.getFields();
+
+    // Only strip XFA on hybrid PDFs that have AcroForm fields. Pure XFA PDFs cannot be
+    // converted with pdf-lib; stripping leaves a blank/broken file.
+    if (acroFields.length > 0) {
+      try {
+        const acroForm = pdfDoc.catalog.lookup(PDFName.of('AcroForm'));
+        if (acroForm instanceof PDFDict && acroForm.has(PDFName.of('XFA'))) {
+          acroForm.delete(PDFName.of('XFA'));
+          logger.info('Stripped /XFA from hybrid AcroForm PDF for browser-compatible output.');
+        }
+      } catch (err) {
+        logger.warn(`Non-blocking warning while stripping XFA from catalog: ${err.message}`);
+      }
+    } else {
+      logger.warn(
+        'PDF has XFA but no AcroForm fields. Use Adobe PDF Services or pdftk to flatten before preview.'
+      );
+    }
     
     Object.entries(fieldValues).forEach(([fieldName, value]) => {
       try {

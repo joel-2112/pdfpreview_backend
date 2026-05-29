@@ -23,6 +23,10 @@ const documentSchema = new mongoose.Schema({
     enum: ['AcroForm', 'XFA', 'flat', 'unknown'],
     default: 'unknown'
   },
+  hasXfa: {
+    type: Boolean,
+    default: false
+  },
   status: {
     type: String,
     enum: ['uploaded', 'processed', 'failed'],

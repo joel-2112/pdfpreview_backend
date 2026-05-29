@@ -28,6 +28,11 @@ const autofillDocument = async (documentId, userId) => {
   if (!fieldMap) {
     throw new Error('Field mappings not configured for this document.');
   }
+  if (doc.type === 'XFA' || (doc.hasXfa && (!doc.fields || doc.fields.length === 0))) {
+    throw new Error(
+      'This template uses XFA forms. Convert it with Adobe PDF Services or pdftk before autofill and browser preview.'
+    );
+  }
   
   // 1. Map user profile values to PDF form keys
   const injectValues = {};

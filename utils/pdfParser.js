@@ -20,15 +20,15 @@ const parsePdf = async (filePath) => {
     throw new Error(`Failed to read PDF document binary: ${error.message}`);
   }
   
-  let stripped = false;
+  // Detect XFA in catalog (hybrid PDFs may also have AcroForm fields)
+  let hasXfaInCatalog = false;
   try {
     const acroForm = pdfDoc.catalog.lookup(PDFName.of('AcroForm'));
     if (acroForm instanceof PDFDict && acroForm.has(PDFName.of('XFA'))) {
-      acroForm.delete(PDFName.of('XFA'));
-      stripped = true;
+      hasXfaInCatalog = true;
     }
   } catch (err) {
-    // Non-blocking warning
+    // Non-blocking
   }
 
   const form = pdfDoc.getForm();
@@ -69,17 +69,9 @@ const parsePdf = async (filePath) => {
     return { name, type: fieldType, value };
   });
   
-  if (stripped) {
-    try {
-      const cleanedBytes = await pdfDoc.save();
-      fs.writeFileSync(filePath, cleanedBytes);
-    } catch (saveErr) {
-      // Non-blocking fallback
-    }
-  }
-
   return {
     type,
+    hasXfa: isXfa || hasXfaInCatalog,
     fields: extractedFields
   };
 };

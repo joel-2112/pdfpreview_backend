@@ -23,6 +23,7 @@ const uploadDocument = async (file, userId) => {
     const analysis = await analyzePdf(file.path);
     
     document.type = analysis.type;
+    document.hasXfa = Boolean(analysis.hasXfa);
     document.fields = analysis.fields;
     document.status = 'processed';
     await document.save();
