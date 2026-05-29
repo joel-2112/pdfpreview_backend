@@ -15,21 +15,13 @@ const injectData = async (sourcePath, fieldValues, outputPath) => {
     const pdfBytes = fs.readFileSync(sourcePath);
     const pdfDoc = await PDFDocument.load(pdfBytes, { ignoreEncryption: true });
     
-    // Strip the XFA stream and NeedsRendering flag from the Catalog to ensure browser compatibility
+    // Strip the XFA stream from the Catalog if present to ensure browser compatibility
     try {
-      if (pdfDoc.catalog.has(PDFName.of('NeedsRendering'))) {
-        pdfDoc.catalog.delete(PDFName.of('NeedsRendering'));
-      }
       const acroForm = pdfDoc.catalog.lookup(PDFName.of('AcroForm'));
-      if (acroForm instanceof PDFDict) {
-        if (acroForm.has(PDFName.of('XFA'))) {
-          acroForm.delete(PDFName.of('XFA'));
-        }
-        if (acroForm.has(PDFName.of('NeedsRendering'))) {
-          acroForm.delete(PDFName.of('NeedsRendering'));
-        }
+      if (acroForm instanceof PDFDict && acroForm.has(PDFName.of('XFA'))) {
+        acroForm.delete(PDFName.of('XFA'));
+        logger.info('Successfully detected and stripped /XFA reference from standard catalog to enable browser rendering.');
       }
-      logger.info('Successfully detected and stripped XFA / NeedsRendering references from catalog to enable browser rendering.');
     } catch (err) {
       logger.warn(`Non-blocking warning while stripping XFA from catalog: ${err.message}`);
     }

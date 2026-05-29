@@ -22,23 +22,10 @@ const parsePdf = async (filePath) => {
   
   let stripped = false;
   try {
-    // 1. Delete NeedsRendering from the Catalog root
-    if (pdfDoc.catalog.has(PDFName.of('NeedsRendering'))) {
-      pdfDoc.catalog.delete(PDFName.of('NeedsRendering'));
-      stripped = true;
-    }
-    
-    // 2. Delete XFA and NeedsRendering from the AcroForm sub-dictionary
     const acroForm = pdfDoc.catalog.lookup(PDFName.of('AcroForm'));
-    if (acroForm instanceof PDFDict) {
-      if (acroForm.has(PDFName.of('XFA'))) {
-        acroForm.delete(PDFName.of('XFA'));
-        stripped = true;
-      }
-      if (acroForm.has(PDFName.of('NeedsRendering'))) {
-        acroForm.delete(PDFName.of('NeedsRendering'));
-        stripped = true;
-      }
+    if (acroForm instanceof PDFDict && acroForm.has(PDFName.of('XFA'))) {
+      acroForm.delete(PDFName.of('XFA'));
+      stripped = true;
     }
   } catch (err) {
     // Non-blocking warning

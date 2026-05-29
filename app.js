@@ -1,38 +1,61 @@
 const express = require('express');
 const morgan = require('morgan');
 const helmet = require('helmet');
-const corsMiddleware = require('./config/cors');
+const cors = require('cors');
 const apiRoutes = require('./routes');
 const errorHandler = require('./middleware/error.middleware');
 
 const app = express();
 
-// Standard HTTP Security Headers
+// Security headers
 app.use(helmet());
 
-// Log HTTP transactions during local development
+// ✅ CORS — preflight + all routes
+const corsOptions = {
+  origin: (origin, callback) => {
+    const allowedOrigins = [
+      'http://localhost:3000',
+      'http://localhost:5173',
+      'https://fool-mulch-unroll.ngrok-free.dev',
+      'https://pdfpreview-adobe.vercel.app',
+      process.env.FRONTEND_URL,
+    ].filter(Boolean);
+
+    if (!origin || allowedOrigins.includes(origin)) {
+      callback(null, true);
+    } else {
+      callback(new Error(`CORS blocked: ${origin}`));
+    }
+  },
+  credentials: true,
+  methods: ['GET', 'POST', 'PUT', 'DELETE', 'PATCH', 'OPTIONS'],
+  allowedHeaders: ['Content-Type', 'Authorization'],
+  optionsSuccessStatus: 200,
+};
+
+app.options('*', cors(corsOptions)); // ✅ preflight አስቀድሞ
+app.use(cors(corsOptions));          // ✅ ሁሉም routes
+
+// Development logger
 if (process.env.NODE_ENV === 'development') {
   app.use(morgan('dev'));
 }
 
-// Enable Cross-Origin Request parameters
-app.use(corsMiddleware);
-
-// URL-encoded and standard JSON parsers
+// Body parsers
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
 
-// Centralized Router Mount
+// Routes
 app.use('/api', apiRoutes);
 
-// Catch-all route to format matching 404s
+// 404 handler
 app.use((req, res, next) => {
   const error = new Error(`Resource Not Found - ${req.originalUrl}`);
   error.statusCode = 404;
   next(error);
 });
 
-// Centralized Global Error middleware
+// Global error handler
 app.use(errorHandler);
 
 module.exports = app;

@@ -1,8 +1,4 @@
-const Document = require('../models/Document.model');
-const FieldMap = require('../models/FieldMap.model');
-const { analyzePdf } = require('./pdf.service');
-const { deleteFile } = require('../utils/fileHelper');
-const logger = require('../utils/logger');
+
 
 /**
  * Handle new document uploads: metadata mapping, static extraction, field definitions, and db creation.
@@ -15,7 +11,8 @@ const uploadDocument = async (file, userId) => {
     user: userId,
     originalName: file.originalname,
     filename: file.filename,
-    path: file.path,
+    // Store path relative to project root for portability
+    path: path.relative(process.cwd(), file.path),
     size: file.size,
     status: 'uploaded'
   });
@@ -63,6 +60,8 @@ const getDocumentById = async (id, userId) => {
   return doc;
 };
 
+
+
 const getDocuments = async (userId) => {
   return await Document.find({ user: userId }).sort({ createdAt: -1 });
 };
@@ -76,7 +75,8 @@ const deleteDocument = async (id, userId) => {
   }
   
   // 1. Delete physical template copy from local uploads
-  deleteFile(doc.path);
+  const absolutePath = path.join(process.cwd(), doc.path);
+  deleteFile(absolutePath);
   
   // 2. Remove configuration maps and definitions
   await FieldMap.deleteOne({ document: id, user: userId });
