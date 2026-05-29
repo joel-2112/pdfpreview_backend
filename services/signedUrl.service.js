@@ -8,7 +8,6 @@ const generateSignedUrl = (documentId, userId, type = 'original') => {
     { expiresIn: '15m' }
   );
 
-  // ✅ absolute URL — Adobe ይቀበለዋል
   const BASE_URL = process.env.BASE_URL || 'http://localhost:5000';
   const signedUrl = `${BASE_URL}/api/documents/secure-view?token=${token}`;
 
