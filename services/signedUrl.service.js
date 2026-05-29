@@ -8,8 +8,8 @@ const generateSignedUrl = (documentId, userId, type = 'original') => {
     { expiresIn: '15m' }
   );
 
-  // Relative path – works from any origin (dev or production)
-  const signedUrl = `/api/documents/secure-view?token=${token}`;
+  const BASE_URL = process.env.BASE_URL || 'http://localhost:5000';
+  const signedUrl = `${BASE_URL}/api/documents/secure-view?token=${token}`;
 
   logger.info(`Generated signed link for Document: ${documentId}, Type: ${type}`);
   return signedUrl;
