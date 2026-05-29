@@ -14,15 +14,19 @@ app.use(
 );
 
 // ✅ CORS — preflight + all routes
+const DEFAULT_ORIGINS = [
+  'http://localhost:5000',
+  'http://localhost:5173',
+  'https://pdfpreview-backend.onrender.com',
+  'https://pdfpreview-adobe.vercel.app',
+];
+
+const allowedOrigins = process.env.CORS_ORIGINS
+  ? process.env.CORS_ORIGINS.split(',').map((o) => o.trim()).filter(Boolean)
+  : DEFAULT_ORIGINS;
+
 const corsOptions = {
   origin: (origin, callback) => {
-    const allowedOrigins = [
-      'http://localhost:5000',
-      'http://localhost:5173',
-      'https://pdfpreview-backend.onrender.com',
-      'https://pdfpreview-adobe.vercel.app'
-    ].filter(Boolean);
-
     if (!origin || allowedOrigins.includes(origin)) {
       callback(null, true);
     } else {
