@@ -1,5 +1,4 @@
 const express = require('express');
-const morgan = require('morgan');
 const helmet = require('helmet');
 const cors = require('cors');
 const apiRoutes = require('./routes');
@@ -36,10 +35,6 @@ const corsOptions = {
 app.options('*', cors(corsOptions)); // ✅ preflight አስቀድሞ
 app.use(cors(corsOptions));          // ✅ ሁሉም routes
 
-// Development logger
-if (process.env.NODE_ENV === 'development') {
-  app.use(morgan('dev'));
-}
 
 // Body parsers
 app.use(express.json());
