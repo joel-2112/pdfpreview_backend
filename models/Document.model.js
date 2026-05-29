@@ -27,6 +27,15 @@ const documentSchema = new mongoose.Schema({
     type: Boolean,
     default: false
   },
+  xfaEngine: {
+    type: String,
+    enum: ['livecycle', 'generic'],
+  },
+  pdfTitle: { type: String, default: null },
+  pdfCreator: { type: String, default: null },
+  pdfProducer: { type: String, default: null },
+  previewPath: { type: String, default: null },
+  previewOriginalName: { type: String, default: null },
   status: {
     type: String,
     enum: ['uploaded', 'processed', 'failed'],

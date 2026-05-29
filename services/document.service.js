@@ -1,5 +1,6 @@
 const Document = require('../models/Document.model');
 const path = require('path');
+const fs = require('fs');
 const FieldMap = require('../models/FieldMap.model');
 const { analyzePdf } = require('./pdf.service');
 const { deleteFile } = require('../utils/fileHelper');
@@ -25,6 +26,10 @@ const uploadDocument = async (file, userId) => {
     
     document.type = analysis.type;
     document.hasXfa = Boolean(analysis.hasXfa);
+    document.xfaEngine = analysis.xfaEngine || null;
+    document.pdfTitle = analysis.pdfTitle || null;
+    document.pdfCreator = analysis.pdfCreator || null;
+    document.pdfProducer = analysis.pdfProducer || null;
     document.fields = analysis.fields;
     document.status = 'processed';
     await document.save();
@@ -78,6 +83,9 @@ const deleteDocument = async (id, userId) => {
   const absolutePath = path.join(process.cwd(), doc.path);
   deleteFile(absolutePath);
   deleteFile(getFlattenedPath(id.toString()));
+  if (doc.previewPath) {
+    deleteFile(path.join(process.cwd(), doc.previewPath));
+  }
 
   // 2. Remove configuration maps and definitions
   await FieldMap.deleteOne({ document: id, user: userId });
@@ -87,9 +95,48 @@ const deleteDocument = async (id, userId) => {
   return true;
 };
 
+const attachPreviewPdf = async (documentId, userId, file) => {
+  const doc = await getDocumentById(documentId, userId);
+  const { isXfaPlaceholderPdf } = require('../utils/xfaPlaceholder');
+
+  const previewDir = path.join(process.cwd(), 'uploads', 'previews');
+  if (!fs.existsSync(previewDir)) {
+    fs.mkdirSync(previewDir, { recursive: true });
+  }
+
+  const destName = `preview-${documentId}-${Date.now()}${path.extname(file.originalname)}`;
+  const destAbsolute = path.join(previewDir, destName);
+
+  fs.renameSync(file.path, destAbsolute);
+
+  if (isXfaPlaceholderPdf(destAbsolute)) {
+    fs.unlinkSync(destAbsolute);
+    const error = new Error(
+      'This file is still the XFA "Please wait" shell. In Acrobat Reader: open the form → Print → Save as PDF, then upload that file.'
+    );
+    error.statusCode = 400;
+    throw error;
+  }
+
+  if (doc.previewPath) {
+    deleteFile(path.join(process.cwd(), doc.previewPath));
+  }
+
+  doc.previewPath = path.relative(process.cwd(), destAbsolute);
+  doc.previewOriginalName = file.originalname;
+  await doc.save();
+
+  const { getFlattenedPath } = require('./xfaPreview.service');
+  deleteFile(getFlattenedPath(documentId.toString()));
+
+  logger.info(`Attached flattened preview PDF for document ${documentId}`);
+  return doc;
+};
+
 module.exports = {
   uploadDocument,
   getDocumentById,
   getDocuments,
-  deleteDocument
+  deleteDocument,
+  attachPreviewPdf,
 };

@@ -6,12 +6,27 @@ const fs = require('fs');
  * @param {string} filePath - Absolute path to the PDF file
  * @returns {Promise<{type: string, fields: Array<{name: string, type: string, value: string}>}>}
  */
+const pickPdfInfoString = (pdfString, key) => {
+  const paren = pdfString.match(new RegExp(`/${key}\\s*\\(([^)]*)\\)`));
+  if (paren) {
+    return paren[1].replace(/\\\(/g, '(').replace(/\\\)/g, ')').replace(/\\\\/g, '\\');
+  }
+  return null;
+};
+
 const parsePdf = async (filePath) => {
   const pdfBytes = fs.readFileSync(filePath);
   
   // 1. Search for XFA tags in the file buffer (very reliable static signature scan)
-  const pdfString = pdfBytes.toString('utf-8', 0, Math.min(pdfBytes.length, 5 * 1024 * 1024));
+  const pdfString = pdfBytes.toString('latin1', 0, Math.min(pdfBytes.length, 5 * 1024 * 1024));
   const isXfa = pdfString.includes('/XFA') || pdfString.includes('<xfa:') || pdfString.includes('xfa:datasets');
+
+  const pdfTitle = pickPdfInfoString(pdfString, 'Title');
+  const pdfCreator = pickPdfInfoString(pdfString, 'Creator');
+  const pdfProducer = pickPdfInfoString(pdfString, 'Producer');
+  const liveCycle =
+    /LiveCycle/i.test([pdfCreator, pdfProducer].filter(Boolean).join(' '));
+  const xfaEngine = isXfa && liveCycle ? 'livecycle' : isXfa ? 'generic' : null;
   
   let pdfDoc;
   try {
@@ -72,7 +87,11 @@ const parsePdf = async (filePath) => {
   return {
     type,
     hasXfa: isXfa || hasXfaInCatalog,
-    fields: extractedFields
+    xfaEngine,
+    pdfTitle,
+    pdfCreator,
+    pdfProducer,
+    fields: extractedFields,
   };
 };
 

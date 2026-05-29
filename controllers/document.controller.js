@@ -1,6 +1,11 @@
 const documentService = require('../services/document.service');
 const { generateSignedUrl, verifySignedUrlToken } = require('../services/signedUrl.service');
-const { ensureFlattenedPreview, getPreviewStatus } = require('../services/xfaPreview.service');
+const {
+  ensureFlattenedPreview,
+  getPreviewStatus,
+  hasPreviewReady,
+} = require('../services/xfaPreview.service');
+const { isLiveCycleXfa } = require('../utils/xfaPlaceholder');
 const { successResponse, errorResponse } = require('../utils/apiResponse');
 const fs = require('fs');
 const path = require('path');
@@ -18,19 +23,40 @@ const resolveDocumentFilePath = async (doc, userId, streamType) => {
   }
 
   if (streamType === 'preview' && needsXfaPreview(doc)) {
-    const flattened = await ensureFlattenedPreview(absoluteSource, doc._id.toString());
+    const flattened = await ensureFlattenedPreview(
+      absoluteSource,
+      doc._id.toString(),
+      doc
+    );
     if (!flattened) {
+      const liveCycle = isLiveCycleXfa(doc);
       const err = new Error(
-        'XFA preview is not available on this server. Install pdftk or upload an AcroForm PDF.'
+        liveCycle
+          ? 'This is a LiveCycle XFA form (e.g. IMM 1295). Upload a flattened preview PDF (Print to PDF from Acrobat Reader).'
+          : 'XFA preview is not available. Install pdftk on the server or upload a flattened preview PDF.'
       );
       err.statusCode = 503;
       err.code = 'XFA_PREVIEW_UNAVAILABLE';
+      err.liveCycle = liveCycle;
       throw err;
     }
     return flattened;
   }
 
   return absoluteSource;
+};
+
+const uploadPreviewPdf = async (req, res, next) => {
+  try {
+    const doc = await documentService.attachPreviewPdf(
+      req.params.id,
+      req.user.id,
+      req.file
+    );
+    return successResponse(res, doc, 'Flattened preview PDF attached. You can open Preview now.');
+  } catch (error) {
+    next(error);
+  }
 };
 
 const upload = async (req, res, next) => {
@@ -79,13 +105,18 @@ const getSecureLink = async (req, res, next) => {
     let previewReady = true;
     if (streamType === 'preview' && needsXfaPreview(doc)) {
       const absoluteSource = path.join(process.cwd(), doc.path);
-      const flattened = await ensureFlattenedPreview(absoluteSource, doc._id.toString());
-      previewReady = Boolean(flattened);
+      previewReady = await hasPreviewReady(doc, absoluteSource);
     }
 
     return successResponse(
       res,
-      { signedUrl, previewReady, needsXfaPreview: needsXfaPreview(doc) },
+      {
+        signedUrl,
+        previewReady,
+        needsXfaPreview: needsXfaPreview(doc),
+        liveCycleXfa: isLiveCycleXfa(doc),
+        hasManualPreview: Boolean(doc.previewPath),
+      },
       'Secure temporary link generated.'
     );
   } catch (error) {
@@ -102,17 +133,27 @@ const preparePreview = async (req, res, next) => {
     }
 
     const absoluteSource = path.join(process.cwd(), doc.path);
-    const flattened = await ensureFlattenedPreview(absoluteSource, doc._id.toString());
+    const flattened = await ensureFlattenedPreview(
+      absoluteSource,
+      doc._id.toString(),
+      doc
+    );
     const status = await getPreviewStatus();
 
     if (!flattened) {
-      return errorResponse(
-        res,
-        status.pdftkAvailable
-          ? 'Could not flatten this PDF. The file may use dynamic XFA that pdftk cannot process.'
-          : 'Server preview converter (pdftk) is not installed. Set PDFTK_PATH or upload an AcroForm PDF.',
-        503
-      );
+      const liveCycle = isLiveCycleXfa(doc);
+      let message;
+      if (liveCycle) {
+        message =
+          'IMM / IRCC LiveCycle forms cannot be auto-flattened. Open in Adobe Acrobat Reader → Print → Save as PDF, then use Upload preview PDF.';
+      } else if (!status.pdftkAvailable) {
+        message =
+          'Server preview converter (pdftk) is not installed. Upload a flattened preview PDF or set PDFTK_PATH.';
+      } else {
+        message =
+          'Could not flatten this PDF automatically. Upload a flattened copy from Acrobat Reader.';
+      }
+      return errorResponse(res, message, 503);
     }
 
     return successResponse(res, { previewReady: true }, 'Preview-ready PDF generated.');
@@ -176,6 +217,7 @@ const secureView = async (req, res, next) => {
 
 module.exports = {
   upload,
+  uploadPreviewPdf,
   getAll,
   getOne,
   remove,
