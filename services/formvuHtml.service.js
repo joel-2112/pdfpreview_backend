@@ -154,7 +154,12 @@ const convertPdfToHtml = async (sourceAbsolutePath, outputDir) => {
 };
 
 const documentNeedsHtmlForm = (doc) =>
-  doc.type === 'XFA' || doc.hasXfa || doc.xfaEngine === 'livecycle';
+  Boolean(
+    doc.type === 'XFA' ||
+      doc.hasXfa ||
+      doc.xfaEngine === 'livecycle' ||
+      doc.xfaEngine === 'generic'
+  );
 
 /**
  * Convert a stored document to HTML and persist paths on the Document record.

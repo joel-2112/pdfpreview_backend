@@ -49,10 +49,15 @@ const parsePdf = async (filePath) => {
   const form = pdfDoc.getForm();
   const fields = form.getFields();
   
+  const hasXfa = isXfa || hasXfaInCatalog;
+
+  // LiveCycle / pure XFA must not be classified as AcroForm (Adobe Embed shows "Please wait…")
   let type = 'flat';
-  if (fields.length > 0) {
+  if (hasXfa && (liveCycle || fields.length === 0)) {
+    type = 'XFA';
+  } else if (fields.length > 0) {
     type = 'AcroForm';
-  } else if (isXfa) {
+  } else if (hasXfa) {
     type = 'XFA';
   }
   
@@ -86,7 +91,7 @@ const parsePdf = async (filePath) => {
   
   return {
     type,
-    hasXfa: isXfa || hasXfaInCatalog,
+    hasXfa,
     xfaEngine,
     pdfTitle,
     pdfCreator,

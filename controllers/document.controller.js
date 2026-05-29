@@ -22,7 +22,10 @@ const path = require('path');
 const Document = require('../models/Document.model');
 
 const needsXfaPreview = (doc) =>
-  doc.type === 'XFA' || (doc.hasXfa && (!doc.fields || doc.fields.length === 0));
+  doc.type === 'XFA' ||
+  doc.hasXfa ||
+  doc.xfaEngine === 'livecycle' ||
+  doc.xfaEngine === 'generic';
 
 const resolveDocumentFilePath = async (doc, userId, streamType) => {
   const absoluteSource = path.join(process.cwd(), doc.path);
@@ -91,6 +94,15 @@ const getOne = async (req, res, next) => {
   try {
     const doc = await documentService.getDocumentById(req.params.id, req.user.id);
     return successResponse(res, doc, 'Document retrieved successfully.');
+  } catch (error) {
+    next(error);
+  }
+};
+
+const reanalyze = async (req, res, next) => {
+  try {
+    const doc = await documentService.reanalyzeDocument(req.params.id, req.user.id);
+    return successResponse(res, doc, 'Document re-analyzed. XFA forms will use HTML preview.');
   } catch (error) {
     next(error);
   }
@@ -312,6 +324,7 @@ module.exports = {
   uploadPreviewPdf,
   getAll,
   getOne,
+  reanalyze,
   remove,
   getSecureLink,
   secureView,

@@ -73,6 +73,30 @@ const getDocumentById = async (id, userId) => {
     error.statusCode = 404;
     throw error;
   }
+  const { syncDocumentXfaMetadata } = require('../utils/xfaDetect');
+  return syncDocumentXfaMetadata(doc);
+};
+
+const reanalyzeDocument = async (id, userId) => {
+  const doc = await getDocumentById(id, userId);
+  const absolutePath = path.join(process.cwd(), doc.path);
+  const analysis = await analyzePdf(absolutePath);
+
+  doc.type = analysis.type;
+  doc.hasXfa = Boolean(analysis.hasXfa);
+  doc.xfaEngine = analysis.xfaEngine || null;
+  doc.pdfTitle = analysis.pdfTitle || null;
+  doc.pdfCreator = analysis.pdfCreator || null;
+  doc.pdfProducer = analysis.pdfProducer || null;
+  doc.fields = analysis.fields;
+  await doc.save();
+
+  if (documentNeedsHtmlForm(doc)) {
+    doc.htmlFormStatus = 'pending';
+    await doc.save();
+    scheduleHtmlConversion(doc._id, userId);
+  }
+
   return doc;
 };
 
@@ -154,4 +178,5 @@ module.exports = {
   getDocuments,
   deleteDocument,
   attachPreviewPdf,
+  reanalyzeDocument,
 };
