@@ -14,9 +14,9 @@ app.use(helmet());
 const corsOptions = {
   origin: (origin, callback) => {
     const allowedOrigins = [
-      'http://localhost:3000',
+      'http://localhost:5000',
       'http://localhost:5173',
-      'https://fool-mulch-unroll.ngrok-free.dev',
+      'https://pdfpreview-backend.onrender.com',
       'https://pdfpreview-adobe.vercel.app',
       process.env.FRONTEND_URL,
     ].filter(Boolean);
@@ -37,9 +37,9 @@ app.options('*', cors(corsOptions)); // ✅ preflight አስቀድሞ
 app.use(cors(corsOptions));          // ✅ ሁሉም routes
 
 // Development logger
-if (process.env.NODE_ENV === 'development') {
-  app.use(morgan('dev'));
-}
+// if (process.env.NODE_ENV === 'development') {
+//   app.use(morgan('dev'));
+// }
 
 // Body parsers
 app.use(express.json());
