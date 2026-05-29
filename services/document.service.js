@@ -3,6 +3,7 @@ const path = require('path');
 const FieldMap = require('../models/FieldMap.model');
 const { analyzePdf } = require('./pdf.service');
 const { deleteFile } = require('../utils/fileHelper');
+const { getFlattenedPath } = require('./xfaPreview.service');
 const logger = require('../utils/logger');
 
 const uploadDocument = async (file, userId) => {
@@ -76,7 +77,8 @@ const deleteDocument = async (id, userId) => {
   // 1. Delete physical template copy from local uploads
   const absolutePath = path.join(process.cwd(), doc.path);
   deleteFile(absolutePath);
-  
+  deleteFile(getFlattenedPath(id.toString()));
+
   // 2. Remove configuration maps and definitions
   await FieldMap.deleteOne({ document: id, user: userId });
   await Document.deleteOne({ _id: id, user: userId });
