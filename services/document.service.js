@@ -1,17 +1,15 @@
+const Document = require('../models/Document.model');
+const path = require('path');
+const FieldMap = require('../models/FieldMap.model');
+const { analyzePdf } = require('./pdf.service');
+const { deleteFile } = require('../utils/fileHelper');
+const logger = require('../utils/logger');
 
-
-/**
- * Handle new document uploads: metadata mapping, static extraction, field definitions, and db creation.
- * @param {Object} file - Multer uploaded file schema
- * @param {string} userId - Requesting user Mongoose ID
- * @returns {Promise<Document>}
- */
 const uploadDocument = async (file, userId) => {
   const document = new Document({
     user: userId,
     originalName: file.originalname,
     filename: file.filename,
-    // Store path relative to project root for portability
     path: path.relative(process.cwd(), file.path),
     size: file.size,
     status: 'uploaded'
