@@ -1,5 +1,15 @@
 const documentService = require('../services/document.service');
-const { generateSignedUrl, verifySignedUrlToken } = require('../services/signedUrl.service');
+const {
+  generateSignedUrl,
+  verifySignedUrlToken,
+  generateHtmlFormUrl,
+} = require('../services/signedUrl.service');
+const {
+  convertDocumentToHtml,
+  isFormVuConfigured,
+  documentNeedsHtmlForm,
+  resolveHtmlAssetPath,
+} = require('../services/formvuHtml.service');
 const {
   ensureFlattenedPreview,
   getPreviewStatus,
@@ -108,17 +118,23 @@ const getSecureLink = async (req, res, next) => {
       previewReady = await hasPreviewReady(doc, absoluteSource);
     }
 
-    return successResponse(
-      res,
-      {
-        signedUrl,
-        previewReady,
-        needsXfaPreview: needsXfaPreview(doc),
-        liveCycleXfa: isLiveCycleXfa(doc),
-        hasManualPreview: Boolean(doc.previewPath),
-      },
-      'Secure temporary link generated.'
-    );
+    const responseData = {
+      signedUrl,
+      previewReady,
+      needsXfaPreview: needsXfaPreview(doc),
+      liveCycleXfa: isLiveCycleXfa(doc),
+      hasManualPreview: Boolean(doc.previewPath),
+      htmlFormStatus: doc.htmlFormStatus,
+      htmlFormError: doc.htmlFormError,
+      formVuConfigured: isFormVuConfigured(),
+      htmlFormUrl: null,
+    };
+
+    if (documentNeedsHtmlForm(doc) && doc.htmlFormStatus === 'ready') {
+      responseData.htmlFormUrl = generateHtmlFormUrl(doc._id, req.user.id);
+    }
+
+    return successResponse(res, responseData, 'Secure temporary link generated.');
   } catch (error) {
     next(error);
   }
@@ -165,9 +181,85 @@ const preparePreview = async (req, res, next) => {
 const getPreviewCapabilities = async (req, res, next) => {
   try {
     const status = await getPreviewStatus();
-    return successResponse(res, status, 'Preview capabilities retrieved.');
+    return successResponse(res, {
+      ...status,
+      formVuConfigured: isFormVuConfigured(),
+    }, 'Preview capabilities retrieved.');
   } catch (error) {
     next(error);
+  }
+};
+
+const convertToHtml = async (req, res, next) => {
+  try {
+    const doc = await convertDocumentToHtml(req.params.id, req.user.id);
+    const htmlFormUrl = generateHtmlFormUrl(doc._id, req.user.id);
+    return successResponse(
+      res,
+      { document: doc, htmlFormUrl },
+      'Interactive HTML form generated successfully.'
+    );
+  } catch (error) {
+    next(error);
+  }
+};
+
+const getHtmlFormLink = async (req, res, next) => {
+  try {
+    const doc = await documentService.getDocumentById(req.params.id, req.user.id);
+
+    if (!documentNeedsHtmlForm(doc)) {
+      return successResponse(
+        res,
+        { htmlFormStatus: 'none', formVuConfigured: isFormVuConfigured() },
+        'Document does not use HTML form preview.'
+      );
+    }
+
+    const payload = {
+      htmlFormStatus: doc.htmlFormStatus,
+      htmlFormError: doc.htmlFormError,
+      formVuConfigured: isFormVuConfigured(),
+      htmlFormUrl: null,
+    };
+
+    if (doc.htmlFormStatus === 'ready') {
+      payload.htmlFormUrl = generateHtmlFormUrl(doc._id, req.user.id);
+    }
+
+    return successResponse(res, payload, 'HTML form status retrieved.');
+  } catch (error) {
+    next(error);
+  }
+};
+
+const secureHtmlView = async (req, res, next) => {
+  try {
+    const token = req.htmlToken;
+    const assetPath = req.htmlAsset || 'form.html';
+
+    const payload = verifySignedUrlToken(token);
+    if (payload.type !== 'html') {
+      return errorResponse(res, 'Invalid token type for HTML form view.', 403);
+    }
+
+    const doc = await Document.findById(payload.documentId);
+    if (!doc) {
+      return errorResponse(res, 'Document not found.', 404);
+    }
+
+    const filePath = resolveHtmlAssetPath(doc, assetPath);
+    if (!filePath) {
+      return errorResponse(res, 'HTML form asset not found.', 404);
+    }
+
+    res.setHeader('X-Frame-Options', 'ALLOWALL');
+    res.removeHeader('X-Frame-Options');
+    res.setHeader('Content-Security-Policy', "frame-ancestors *");
+
+    res.sendFile(filePath);
+  } catch (error) {
+    return errorResponse(res, error.message, 401);
   }
 };
 
@@ -225,4 +317,7 @@ module.exports = {
   secureView,
   preparePreview,
   getPreviewCapabilities,
+  convertToHtml,
+  getHtmlFormLink,
+  secureHtmlView,
 };

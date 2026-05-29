@@ -36,6 +36,14 @@ const documentSchema = new mongoose.Schema({
   pdfProducer: { type: String, default: null },
   previewPath: { type: String, default: null },
   previewOriginalName: { type: String, default: null },
+  htmlFormPath: { type: String, default: null },
+  htmlFormStatus: {
+    type: String,
+    enum: ['none', 'pending', 'converting', 'ready', 'failed'],
+    default: 'none',
+  },
+  htmlFormError: { type: String, default: null },
+  htmlFormConvertedAt: { type: Date, default: null },
   status: {
     type: String,
     enum: ['uploaded', 'processed', 'failed'],

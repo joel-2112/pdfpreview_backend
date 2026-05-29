@@ -24,4 +24,19 @@ const verifySignedUrlToken = (token) => {
   }
 };
 
-module.exports = { generateSignedUrl, verifySignedUrlToken };
+const generateHtmlFormUrl = (documentId, userId) => {
+  const token = jwt.sign(
+    { documentId, userId, type: 'html' },
+    process.env.JWT_SECRET,
+    { expiresIn: '2h' }
+  );
+
+  const BASE_URL = process.env.BASE_URL || 'http://localhost:5000';
+  return `${BASE_URL}/api/documents/html-view/${token}/form.html`;
+};
+
+module.exports = {
+  generateSignedUrl,
+  verifySignedUrlToken,
+  generateHtmlFormUrl,
+};

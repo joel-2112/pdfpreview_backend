@@ -6,8 +6,12 @@ const errorHandler = require('./middleware/error.middleware');
 
 const app = express();
 
-// Security headers
-app.use(helmet());
+// Security headers (HTML form iframe assets set their own frame-ancestors on html-view routes)
+app.use(
+  helmet({
+    crossOriginResourcePolicy: { policy: 'cross-origin' },
+  })
+);
 
 // ✅ CORS — preflight + all routes
 const corsOptions = {

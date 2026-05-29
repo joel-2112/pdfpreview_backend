@@ -5,6 +5,11 @@ const FieldMap = require('../models/FieldMap.model');
 const { analyzePdf } = require('./pdf.service');
 const { deleteFile } = require('../utils/fileHelper');
 const { getFlattenedPath } = require('./xfaPreview.service');
+const {
+  scheduleHtmlConversion,
+  documentNeedsHtmlForm,
+  getHtmlOutputDir,
+} = require('./formvuHtml.service');
 const logger = require('../utils/logger');
 
 const uploadDocument = async (file, userId) => {
@@ -41,6 +46,12 @@ const uploadDocument = async (file, userId) => {
       mappings: {}
     });
     await fieldMap.save();
+
+    if (documentNeedsHtmlForm(document)) {
+      document.htmlFormStatus = 'pending';
+      await document.save();
+      scheduleHtmlConversion(document._id, userId);
+    }
     
     logger.info(`Successfully stored and parsed document metadata: ${document._id}`);
     return document;
@@ -85,6 +96,10 @@ const deleteDocument = async (id, userId) => {
   deleteFile(getFlattenedPath(id.toString()));
   if (doc.previewPath) {
     deleteFile(path.join(process.cwd(), doc.previewPath));
+  }
+  const htmlDir = getHtmlOutputDir(id.toString());
+  if (fs.existsSync(htmlDir)) {
+    fs.rmSync(htmlDir, { recursive: true, force: true });
   }
 
   // 2. Remove configuration maps and definitions
