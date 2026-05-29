@@ -7,7 +7,7 @@ const generateToken = (id) => {
     expiresIn: process.env.JWT_EXPIRE
   });
 };
-
+//register
 const register = async (req, res, next) => {
   try {
     const { name, email, password } = req.body;
