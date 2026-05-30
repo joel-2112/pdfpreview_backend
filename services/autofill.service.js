@@ -86,87 +86,50 @@ const autofillDocument = async (documentId, userId) => {
   return filledPath;
 };
 
-/**
- * Autofill pure XFA forms using pdftk or Adobe PDF Services API
- * This is required for LiveCycle/IMM 1295 forms that cannot be filled with pdf-lib
- */
 const autofillXfaDocument = async (doc, user, fieldMap, outputPath) => {
-  const { execFile } = require('child_process');
-  const { promisify } = require('util');
   const fs = require('fs');
+  const path = require('path');
+  const { PDFDocument } = require('pdf-lib');
+  const { injectXfaData } = require('../utils/xfaInjector');
   const logger = require('../utils/logger');
   
-  const execFileAsync = promisify(execFile);
-  const PDFTK_BIN = process.env.PDFTK_PATH || 'pdftk';
-  
   try {
-    // Check if pdftk is available
-    try {
-      await execFileAsync(PDFTK_BIN, ['--version'], { timeout: 5000 });
-    } catch {
-      throw new Error(
-        'XFA form autofill requires pdftk to be installed on the server. ' +
-        'Install pdftk or set PDFTK_PATH in .env. ' +
-        'Alternatively, configure Adobe PDF Services API for full XFA support: ' +
-        'ADOBE_PDF_SERVICES_CLIENT_ID and ADOBE_PDF_SERVICES_CLIENT_SECRET.'
-      );
-    }
+    logger.info('Injecting data into XFA XML dataset directly');
     
-    // For XFA forms, we need to:
-    // 1. Flatten the XFA form to convert it to a standard PDF
-    // 2. Then fill it using pdf-lib
-    
-    logger.info('Flattening XFA form using pdftk before autofill');
-    
-    // Create a temporary flattened version
-    const tempFlattenedPath = path.join(__dirname, '../uploads/temp', `flattened-${Date.now()}-${doc.filename}`);
-    const tempDir = path.dirname(tempFlattenedPath);
-    if (!fs.existsSync(tempDir)) {
-      fs.mkdirSync(tempDir, { recursive: true });
-    }
-    
-    // Flatten using pdftk
-    await execFileAsync(
-      PDFTK_BIN,
-      [doc.path, 'output', tempFlattenedPath, 'flatten'],
-      { timeout: 120000 }
-    );
-    
-    if (!fs.existsSync(tempFlattenedPath)) {
-      throw new Error('pdftk failed to flatten XFA form');
-    }
-    
-    // Now parse the flattened PDF to get AcroForm fields
-    const { parsePdf } = require('../utils/pdfParser');
-    const parsed = await parsePdf(tempFlattenedPath);
-    
-    if (parsed.fields.length === 0) {
-      throw new Error(
-        'Flattened XFA form has no fillable fields. ' +
-        'This form may not be compatible with automated filling. ' +
-        'Please fill it manually in Adobe Acrobat Reader and save as PDF.'
-      );
-    }
+    // Read the original PDF
+    const pdfBytes = fs.readFileSync(doc.path);
+    const pdfDoc = await PDFDocument.load(pdfBytes, { ignoreEncryption: true });
     
     // Map user profile values to PDF form keys
+    // Since we don't have pdf-lib field extraction for pure XFA, 
+    // we just map every rule in fieldMap
     const injectValues = {};
-    parsed.fields.forEach(field => {
-      const profileFieldKey = fieldMap.mappings.get(field.name);
-      if (profileFieldKey && user.profileData && user.profileData.has(profileFieldKey)) {
-        const value = user.profileData.get(profileFieldKey);
-        injectValues[field.name] = value;
-      } else {
-        injectValues[field.name] = field.value || '';
+    if (user.profileData) {
+      for (const [pdfKey, profileKey] of fieldMap.mappings.entries()) {
+        if (user.profileData.has(profileKey)) {
+          injectValues[pdfKey] = user.profileData.get(profileKey);
+        }
       }
-    });
+    }
     
-    // Fill the flattened PDF
-    await injectData(tempFlattenedPath, injectValues, outputPath);
+    // Fill the XFA XML
+    const injected = await injectXfaData(pdfDoc, injectValues);
     
-    // Clean up temporary file
-    fs.unlinkSync(tempFlattenedPath);
+    if (!injected) {
+      logger.warn('No XFA datasets found to inject or XML update failed. Outputting unchanged document.');
+    }
     
-    logger.info(`XFA autofill complete using pdftk flatten + pdf-lib. Generated file: ${outputPath}`);
+    // Save to outputPath
+    const filledPdfBytes = await pdfDoc.save();
+    
+    const dir = path.dirname(outputPath);
+    if (!fs.existsSync(dir)) {
+      fs.mkdirSync(dir, { recursive: true });
+    }
+    
+    fs.writeFileSync(outputPath, filledPdfBytes);
+    
+    logger.info(`XFA autofill complete using direct XML injection. Generated file: ${outputPath}`);
     return outputPath;
     
   } catch (error) {

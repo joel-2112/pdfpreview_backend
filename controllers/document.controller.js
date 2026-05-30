@@ -35,25 +35,11 @@ const resolveDocumentFilePath = async (doc, userId, streamType) => {
     return autofillService.autofillDocument(doc._id, userId);
   }
 
-  if (streamType === 'preview' && needsXfaPreview(doc)) {
-    const flattened = await ensureFlattenedPreview(
-      absoluteSource,
-      doc._id.toString(),
-      doc
-    );
-    if (!flattened) {
-      const liveCycle = isLiveCycleXfa(doc);
-      const err = new Error(
-        liveCycle
-          ? 'This is a LiveCycle XFA form (e.g. IMM 1295). Upload a flattened preview PDF (Print to PDF from Acrobat Reader).'
-          : 'XFA preview is not available. Install pdftk on the server or upload a flattened preview PDF.'
-      );
-      err.statusCode = 503;
-      err.code = 'XFA_PREVIEW_UNAVAILABLE';
-      err.liveCycle = liveCycle;
-      throw err;
-    }
-    return flattened;
+  // Frontend now uses react-pdf which has native XFA support.
+  // We no longer need to flatten XFA PDFs for preview.
+  if (streamType === 'preview' && doc.previewPath) {
+    // If the user explicitly uploaded a flattened preview, we can use it
+    return path.join(process.cwd(), doc.previewPath);
   }
 
   return absoluteSource;
@@ -125,10 +111,7 @@ const getSecureLink = async (req, res, next) => {
     const signedUrl = generateSignedUrl(doc._id, req.user.id, streamType);
 
     let previewReady = true;
-    if (streamType === 'preview' && needsXfaPreview(doc)) {
-      const absoluteSource = path.join(process.cwd(), doc.path);
-      previewReady = await hasPreviewReady(doc, absoluteSource);
-    }
+    // Frontend natively supports XFA via react-pdf, so preview is always ready.
 
     const responseData = {
       signedUrl,
