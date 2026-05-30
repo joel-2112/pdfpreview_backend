@@ -28,7 +28,7 @@ router.post(
 router.get('/me', protect, getMe);
 
 router.put(
-  '/profile-data',
+  '/profile',
   protect,
   validate([
     body('profileData').isObject().withMessage('profileData must be a key-value object map.')
