@@ -61,7 +61,7 @@ const parsePdf = async (filePath) => {
     type = 'XFA';
   }
   
-  const extractedFields = fields.map(field => {
+  let extractedFields = fields.map(field => {
     const name = field.getName();
     const typeStr = field.constructor.name;
     let fieldType = 'unknown';
@@ -88,6 +88,16 @@ const parsePdf = async (filePath) => {
     
     return { name, type: fieldType, value };
   });
+
+  if (type === 'XFA' && extractedFields.length === 0) {
+    try {
+      const { extractXfaFields } = require('./xfaInjector');
+      const xfaFields = await extractXfaFields(pdfDoc);
+      extractedFields = xfaFields;
+    } catch (err) {
+      console.warn('Could not extract pure XFA fields:', err.message);
+    }
+  }
   
   return {
     type,

@@ -1,4 +1,4 @@
-const { PDFDocument, PDFName, PDFArray, PDFDict } = require('pdf-lib');
+const { PDFDocument, PDFName, PDFArray, PDFDict, PDFStream } = require('pdf-lib');
 const { XMLParser, XMLBuilder } = require('fast-xml-parser');
 const fs = require('fs');
 const zlib = require('zlib');
@@ -131,7 +131,46 @@ const injectXfaData = async (pdfDoc, injectValues) => {
   return false;
 };
 
+const extractXfaFields = async (pdfDoc) => {
+  const ds = await getXfaDatasetsStream(pdfDoc);
+  if (!ds || !ds.xfaEntry) return [];
+
+  const rawContent = await extractXfaXml(ds.xfaEntry);
+  const parser = new XMLParser({ ignoreAttributes: false });
+  const xmlObj = parser.parse(rawContent);
+
+  const fields = [];
+  const traverse = (obj) => {
+    if (!obj || typeof obj !== 'object') return;
+    for (const key of Object.keys(obj)) {
+      if (key === '?' || key === ':@') continue;
+      
+      // If it's a leaf node
+      if (typeof obj[key] === 'string' || typeof obj[key] === 'number' || typeof obj[key] === 'boolean' || obj[key] === '') {
+        // Avoid duplicate field names if possible, or just push
+        if (!fields.find(f => f.name === key)) {
+          fields.push({ name: key, type: 'xfa-text', value: String(obj[key]) });
+        }
+      } else if (typeof obj[key] === 'object' && obj[key] !== null) {
+        if (obj[key]['#text'] !== undefined || Object.keys(obj[key]).length === 0) {
+          if (!fields.find(f => f.name === key)) {
+             fields.push({ name: key, type: 'xfa-text', value: String(obj[key]['#text'] || '') });
+          }
+        } else {
+          traverse(obj[key]);
+        }
+      }
+    }
+  };
+  
+  // Find the data node to start traversing (usually <xfa:datasets><xfa:data>...)
+  // But we can just traverse everything
+  traverse(xmlObj);
+  return fields;
+};
+
 module.exports = {
   injectXfaData,
-  getXfaDatasetsStream
+  getXfaDatasetsStream,
+  extractXfaFields
 };
