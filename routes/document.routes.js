@@ -22,6 +22,7 @@ router.get('/secure-view', secureView);
 router.post('/upload', uploadPdf, protect, upload);
 router.get('/', protect, getAll);
 router.get('/:id/secure-link', protect, getSecureLink);
+router.post('/:id/sign-url', protect, getSecureLink);
 router.post('/:id/prepare-preview', protect, preparePreview);
 router.post('/:id/preview-pdf', uploadPdf, protect, uploadPreviewPdf);
 router.post('/:id/reanalyze', protect, reanalyze);

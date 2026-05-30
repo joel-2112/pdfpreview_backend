@@ -87,8 +87,7 @@ const remove = async (req, res, next) => {
 const getSecureLink = async (req, res, next) => {
   try {
     const doc = await documentService.getDocumentById(req.params.id, req.user.id);
-    const { type } = req.query; // 'original' | 'filled' | 'preview'
-    const streamType = type || 'original';
+    const streamType = req.query.type || req.body?.viewType || 'original';
     const signedUrl = generateSignedUrl(doc._id, req.user.id, streamType);
 
     const responseData = {
