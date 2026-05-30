@@ -1,6 +1,6 @@
 const { PDFDocument, PDFName, PDFDict } = require('pdf-lib');
 const fs = require('fs');
-const { extractXfaFields } = require('./xfaInjector');
+const { extractXfaFields } = require('./pdfTypeDetect');
 
 const pickPdfInfoString = (pdfString, key) => {
   const paren = pdfString.match(new RegExp(`/${key}\\s*\\(([^)]*)\\)`));
@@ -87,7 +87,7 @@ const parsePdf = async (filePath) => {
 
   if (type === 'XFA' && extractedFields.length === 0) {
     try {
-      const { extractXfaFields } = require('./xfaInjector');
+      const { extractXfaFields } = require('./pdfTypeDetect');
       const xfaFields = await extractXfaFields(pdfDoc);
       extractedFields = xfaFields;
     } catch (err) {

@@ -2,7 +2,6 @@ const FieldMap = require('../models/FieldMap.model');
 const User = require('../models/User.model');
 const Document = require('../models/Document.model');
 const { injectData } = require('../utils/pdfInjector');
-const { injectXfaData } = require('../utils/xfaInjector');
 const { PDFDocument } = require('pdf-lib');
 const path = require('path');
 const fs = require('fs');
@@ -24,7 +23,7 @@ const autofillDocument = async (documentId, userId) => {
   if (!fieldMap) {
     throw new Error('Field mappings not configured for this document.');
   }
-  // Generate output path first (needed for both XFA and non-XFA)
+  // Generate output path first
   const filledFilename = `filled-${Date.now()}-${doc.filename}`;
   const filledPath = path.join(__dirname, '../uploads/filled', filledFilename);
   
@@ -34,20 +33,10 @@ const autofillDocument = async (documentId, userId) => {
     fs.mkdirSync(dir, { recursive: true });
   }
   
-  // Check if XFA form and handle accordingly
-  const isPureXfa = doc.type === 'XFA' || (doc.hasXfa && (!doc.fields || doc.fields.length === 0));
-  const isHybridXfa = doc.hasXfa && doc.fields && doc.fields.length > 0;
-  
-  if (isPureXfa) {
-    // Pure XFA forms - use XML-based injection
-    logger.info('Using XML-based XFA injection for pure XFA form');
-    return await autofillXfaDocument(doc, user, fieldMap, filledPath);
-  }
-  
-  if (isHybridXfa) {
-    // Hybrid XFA/AcroForm - use XML injection for XFA part, pdf-lib for AcroForm
-    logger.info('Hybrid XFA/AcroForm detected - will use XML injection for XFA data');
-    return await autofillXfaDocument(doc, user, fieldMap, filledPath);
+  // XFA injection removed — only AcroForm filling is supported
+  if (doc.type === 'XFA' || (doc.hasXfa && (!doc.fields || doc.fields.length === 0))) {
+    logger.warn(`Document ${documentId} is a pure XFA form. AcroForm autofill not possible — no fields to fill.`);
+    throw new Error('Pure XFA forms cannot be autofilled. Only AcroForm PDFs are supported.');
   }
   
   // 1. Map user profile values to PDF form keys
@@ -71,56 +60,6 @@ const autofillDocument = async (documentId, userId) => {
   
   logger.info(`Autofill complete. Generated file saved at: ${filledPath}`);
   return filledPath;
-};
-
-const autofillXfaDocument = async (doc, user, fieldMap, outputPath) => {
-  const { PDFDocument } = require('pdf-lib');
-  const { injectXfaData } = require('../utils/xfaInjector');
-  const logger = require('../utils/logger');
-  
-  try {
-    logger.info('Injecting data into XFA XML dataset directly');
-    
-    // Read the original PDF
-    const pdfBytes = fs.readFileSync(doc.path);
-    const pdfDoc = await PDFDocument.load(pdfBytes, { ignoreEncryption: true });
-    
-    // Map user profile values to PDF form keys
-    // Since we don't have pdf-lib field extraction for pure XFA, 
-    // we just map every rule in fieldMap
-    const injectValues = {};
-    if (user.profileData) {
-      for (const [pdfKey, profileKey] of fieldMap.mappings.entries()) {
-        if (user.profileData.has(profileKey)) {
-          injectValues[pdfKey] = user.profileData.get(profileKey);
-        }
-      }
-    }
-    
-    // Fill the XFA XML
-    const injected = await injectXfaData(pdfDoc, injectValues);
-    
-    if (!injected) {
-      logger.warn('No XFA datasets found to inject or XML update failed. Outputting unchanged document.');
-    }
-    
-    // Save to outputPath
-    const filledPdfBytes = await pdfDoc.save();
-    
-    const dir = path.dirname(outputPath);
-    if (!fs.existsSync(dir)) {
-      fs.mkdirSync(dir, { recursive: true });
-    }
-    
-    fs.writeFileSync(outputPath, filledPdfBytes);
-    
-    logger.info(`XFA autofill complete using direct XML injection. Generated file: ${outputPath}`);
-    return outputPath;
-    
-  } catch (error) {
-    logger.error(`XFA autofill error: ${error.message}`);
-    throw error;
-  }
 };
 
 module.exports = {

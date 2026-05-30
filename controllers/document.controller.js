@@ -3,12 +3,6 @@ const {
   generateSignedUrl,
   verifySignedUrlToken,
 } = require('../services/signedUrl.service');
-const {
-  ensureFlattenedPreview,
-  getPreviewStatus,
-  hasPreviewReady,
-} = require('../services/xfaPreview.service');
-const { isLiveCycleXfa } = require('../utils/xfaPlaceholder');
 const { successResponse, errorResponse } = require('../utils/apiResponse');
 const fs = require('fs');
 const path = require('path');
@@ -75,7 +69,7 @@ const getOne = async (req, res, next) => {
 const reanalyze = async (req, res, next) => {
   try {
     const doc = await documentService.reanalyzeDocument(req.params.id, req.user.id);
-    return successResponse(res, doc, 'Document re-analyzed. XFA forms will use HTML preview.');
+    return successResponse(res, doc, 'Document re-analyzed.');
   } catch (error) {
     next(error);
   }
@@ -97,17 +91,10 @@ const getSecureLink = async (req, res, next) => {
     const streamType = type || 'original';
     const signedUrl = generateSignedUrl(doc._id, req.user.id, streamType);
 
-    let previewReady = true;
-    if (streamType === 'preview' && (doc.type === 'XFA' || doc.hasXfa)) {
-      const absoluteSource = path.join(process.cwd(), doc.path);
-      previewReady = await hasPreviewReady(doc, absoluteSource);
-    }
-
     const responseData = {
       signedUrl,
-      previewReady,
-      needsXfaPreview: doc.type === 'XFA' || doc.hasXfa,
-      liveCycleXfa: isLiveCycleXfa(doc),
+      previewReady: true,
+      isXfa: doc.type === 'XFA' || doc.hasXfa,
       hasManualPreview: Boolean(doc.previewPath),
     };
 
@@ -125,31 +112,8 @@ const preparePreview = async (req, res, next) => {
       return successResponse(res, { previewReady: true }, 'Document does not require XFA conversion.');
     }
 
-    const absoluteSource = path.join(process.cwd(), doc.path);
-    const flattened = await ensureFlattenedPreview(
-      absoluteSource,
-      doc._id.toString(),
-      doc
-    );
-    const status = await getPreviewStatus();
-
-    if (!flattened) {
-      const liveCycle = isLiveCycleXfa(doc);
-      let message;
-      if (liveCycle) {
-        message =
-          'IMM / IRCC LiveCycle forms cannot be auto-flattened. Open in Adobe Acrobat Reader → Print → Save as PDF, then use Upload preview PDF.';
-      } else if (!status.pdftkAvailable) {
-        message =
-          'Server preview converter (pdftk) is not installed. Upload a flattened preview PDF or set PDFTK_PATH.';
-      } else {
-        message =
-          'Could not flatten this PDF automatically. Upload a flattened copy from Acrobat Reader.';
-      }
-      return errorResponse(res, message, 503);
-    }
-
-    return successResponse(res, { previewReady: true }, 'Preview-ready PDF generated.');
+    // XFA flattening removed — client should upload a flattened PDF if needed
+    return errorResponse(res, 'XFA preview generation is not supported server-side. Please upload a flattened PDF.', 503);
   } catch (error) {
     next(error);
   }

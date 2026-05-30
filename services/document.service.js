@@ -4,7 +4,6 @@ const fs = require('fs');
 const FieldMap = require('../models/FieldMap.model');
 const { analyzePdf } = require('./pdf.service');
 const { deleteFile } = require('../utils/fileHelper');
-const { getFlattenedPath } = require('./xfaPreview.service');
 const logger = require('../utils/logger');
 
 const uploadDocument = async (file, userId) => {
@@ -62,7 +61,7 @@ const getDocumentById = async (id, userId) => {
     error.statusCode = 404;
     throw error;
   }
-  const { syncDocumentXfaMetadata } = require('../utils/xfaDetect');
+  const { syncDocumentXfaMetadata } = require('../utils/pdfTypeDetect');
   return syncDocumentXfaMetadata(doc);
 };
 
@@ -98,13 +97,8 @@ const deleteDocument = async (id, userId) => {
   // 1. Delete physical template copy from local uploads
   const absolutePath = path.join(process.cwd(), doc.path);
   deleteFile(absolutePath);
-  deleteFile(getFlattenedPath(id.toString()));
   if (doc.previewPath) {
     deleteFile(path.join(process.cwd(), doc.previewPath));
-  }
-  const htmlDir = getHtmlOutputDir(id.toString());
-  if (fs.existsSync(htmlDir)) {
-    fs.rmSync(htmlDir, { recursive: true, force: true });
   }
 
   // 2. Remove configuration maps and definitions
@@ -117,7 +111,6 @@ const deleteDocument = async (id, userId) => {
 
 const attachPreviewPdf = async (documentId, userId, file) => {
   const doc = await getDocumentById(documentId, userId);
-  const { isXfaPlaceholderPdf } = require('../utils/xfaPlaceholder');
 
   const previewDir = path.join(process.cwd(), 'uploads', 'previews');
   if (!fs.existsSync(previewDir)) {
@@ -129,15 +122,6 @@ const attachPreviewPdf = async (documentId, userId, file) => {
 
   fs.renameSync(file.path, destAbsolute);
 
-  if (isXfaPlaceholderPdf(destAbsolute)) {
-    fs.unlinkSync(destAbsolute);
-    const error = new Error(
-      'This file is still the XFA "Please wait" shell. In Acrobat Reader: open the form → Print → Save as PDF, then upload that file.'
-    );
-    error.statusCode = 400;
-    throw error;
-  }
-
   if (doc.previewPath) {
     deleteFile(path.join(process.cwd(), doc.previewPath));
   }
@@ -146,10 +130,7 @@ const attachPreviewPdf = async (documentId, userId, file) => {
   doc.previewOriginalName = file.originalname;
   await doc.save();
 
-  const { getFlattenedPath } = require('./xfaPreview.service');
-  deleteFile(getFlattenedPath(documentId.toString()));
-
-  logger.info(`Attached flattened preview PDF for document ${documentId}`);
+  logger.info(`Attached preview PDF for document ${documentId}`);
   return doc;
 };
 
