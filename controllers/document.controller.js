@@ -2,30 +2,11 @@ const documentService = require('../services/document.service');
 const {
   generateSignedUrl,
   verifySignedUrlToken,
-  generateHtmlFormUrl,
 } = require('../services/signedUrl.service');
-const {
-  convertDocumentToHtml,
-  isFormVuConfigured,
-  documentNeedsHtmlForm,
-  resolveHtmlAssetPath,
-} = require('../services/formvuHtml.service');
-const {
-  ensureFlattenedPreview,
-  getPreviewStatus,
-  hasPreviewReady,
-} = require('../services/xfaPreview.service');
-const { isLiveCycleXfa } = require('../utils/xfaPlaceholder');
 const { successResponse, errorResponse } = require('../utils/apiResponse');
 const fs = require('fs');
 const path = require('path');
 const Document = require('../models/Document.model');
-
-const needsXfaPreview = (doc) =>
-  doc.type === 'XFA' ||
-  doc.hasXfa ||
-  doc.xfaEngine === 'livecycle' ||
-  doc.xfaEngine === 'generic';
 
 const resolveDocumentFilePath = async (doc, userId, streamType) => {
   const absoluteSource = path.join(process.cwd(), doc.path);
@@ -110,24 +91,11 @@ const getSecureLink = async (req, res, next) => {
     const streamType = type || 'original';
     const signedUrl = generateSignedUrl(doc._id, req.user.id, streamType);
 
-    let previewReady = true;
-    // Frontend natively supports XFA via react-pdf, so preview is always ready.
-
     const responseData = {
       signedUrl,
-      previewReady,
-      needsXfaPreview: needsXfaPreview(doc),
-      liveCycleXfa: isLiveCycleXfa(doc),
+      previewReady: true, // Frontend natively supports XFA via react-pdf
       hasManualPreview: Boolean(doc.previewPath),
-      htmlFormStatus: doc.htmlFormStatus,
-      htmlFormError: doc.htmlFormError,
-      formVuConfigured: isFormVuConfigured(),
-      htmlFormUrl: null,
     };
-
-    if (documentNeedsHtmlForm(doc) && doc.htmlFormStatus === 'ready') {
-      responseData.htmlFormUrl = generateHtmlFormUrl(doc._id, req.user.id);
-    }
 
     return successResponse(res, responseData, 'Secure temporary link generated.');
   } catch (error) {
@@ -135,128 +103,6 @@ const getSecureLink = async (req, res, next) => {
   }
 };
 
-const preparePreview = async (req, res, next) => {
-  try {
-    const doc = await documentService.getDocumentById(req.params.id, req.user.id);
-
-    if (!needsXfaPreview(doc)) {
-      return successResponse(res, { previewReady: true }, 'Document does not require XFA conversion.');
-    }
-
-    const absoluteSource = path.join(process.cwd(), doc.path);
-    const flattened = await ensureFlattenedPreview(
-      absoluteSource,
-      doc._id.toString(),
-      doc
-    );
-    const status = await getPreviewStatus();
-
-    if (!flattened) {
-      const liveCycle = isLiveCycleXfa(doc);
-      let message;
-      if (liveCycle) {
-        message =
-          'IMM / IRCC LiveCycle forms cannot be auto-flattened. Open in Adobe Acrobat Reader → Print → Save as PDF, then use Upload preview PDF.';
-      } else if (!status.pdftkAvailable) {
-        message =
-          'Server preview converter (pdftk) is not installed. Upload a flattened preview PDF or set PDFTK_PATH.';
-      } else {
-        message =
-          'Could not flatten this PDF automatically. Upload a flattened copy from Acrobat Reader.';
-      }
-      return errorResponse(res, message, 503);
-    }
-
-    return successResponse(res, { previewReady: true }, 'Preview-ready PDF generated.');
-  } catch (error) {
-    next(error);
-  }
-};
-
-const getPreviewCapabilities = async (req, res, next) => {
-  try {
-    const status = await getPreviewStatus();
-    return successResponse(res, {
-      ...status,
-      formVuConfigured: isFormVuConfigured(),
-    }, 'Preview capabilities retrieved.');
-  } catch (error) {
-    next(error);
-  }
-};
-
-const convertToHtml = async (req, res, next) => {
-  try {
-    const doc = await convertDocumentToHtml(req.params.id, req.user.id);
-    const htmlFormUrl = generateHtmlFormUrl(doc._id, req.user.id);
-    return successResponse(
-      res,
-      { document: doc, htmlFormUrl },
-      'Interactive HTML form generated successfully.'
-    );
-  } catch (error) {
-    next(error);
-  }
-};
-
-const getHtmlFormLink = async (req, res, next) => {
-  try {
-    const doc = await documentService.getDocumentById(req.params.id, req.user.id);
-
-    if (!documentNeedsHtmlForm(doc)) {
-      return successResponse(
-        res,
-        { htmlFormStatus: 'none', formVuConfigured: isFormVuConfigured() },
-        'Document does not use HTML form preview.'
-      );
-    }
-
-    const payload = {
-      htmlFormStatus: doc.htmlFormStatus,
-      htmlFormError: doc.htmlFormError,
-      formVuConfigured: isFormVuConfigured(),
-      htmlFormUrl: null,
-    };
-
-    if (doc.htmlFormStatus === 'ready') {
-      payload.htmlFormUrl = generateHtmlFormUrl(doc._id, req.user.id);
-    }
-
-    return successResponse(res, payload, 'HTML form status retrieved.');
-  } catch (error) {
-    next(error);
-  }
-};
-
-const secureHtmlView = async (req, res, next) => {
-  try {
-    const token = req.htmlToken;
-    const assetPath = req.htmlAsset || 'form.html';
-
-    const payload = verifySignedUrlToken(token);
-    if (payload.type !== 'html') {
-      return errorResponse(res, 'Invalid token type for HTML form view.', 403);
-    }
-
-    const doc = await Document.findById(payload.documentId);
-    if (!doc) {
-      return errorResponse(res, 'Document not found.', 404);
-    }
-
-    const filePath = resolveHtmlAssetPath(doc, assetPath);
-    if (!filePath) {
-      return errorResponse(res, 'HTML form asset not found.', 404);
-    }
-
-    res.setHeader('X-Frame-Options', 'ALLOWALL');
-    res.removeHeader('X-Frame-Options');
-    res.setHeader('Content-Security-Policy', "frame-ancestors *");
-
-    res.sendFile(filePath);
-  } catch (error) {
-    return errorResponse(res, error.message, 401);
-  }
-};
 
 const secureView = async (req, res, next) => {
   try {
@@ -311,9 +157,4 @@ module.exports = {
   remove,
   getSecureLink,
   secureView,
-  preparePreview,
-  getPreviewCapabilities,
-  convertToHtml,
-  getHtmlFormLink,
-  secureHtmlView,
 };

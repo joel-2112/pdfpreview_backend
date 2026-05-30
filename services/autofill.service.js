@@ -2,16 +2,12 @@ const FieldMap = require('../models/FieldMap.model');
 const User = require('../models/User.model');
 const Document = require('../models/Document.model');
 const { injectData } = require('../utils/pdfInjector');
+const { injectXfaData } = require('../utils/xfaInjector');
+const { PDFDocument } = require('pdf-lib');
 const path = require('path');
 const fs = require('fs');
 const logger = require('../utils/logger');
 
-/**
- * Automates PDF filling by resolving FieldMap rules against the user's Profile data.
- * @param {string} documentId - Target Document Database ID
- * @param {string} userId - Requesting User Database ID
- * @returns {Promise<string>} - Absolute path to the generated filled PDF file
- */
 const autofillDocument = async (documentId, userId) => {
   logger.info(`Starting autofill operation for Document: ${documentId}, User: ${userId}`);
   
@@ -28,29 +24,30 @@ const autofillDocument = async (documentId, userId) => {
   if (!fieldMap) {
     throw new Error('Field mappings not configured for this document.');
   }
+  // Generate output path first (needed for both XFA and non-XFA)
+  const filledFilename = `filled-${Date.now()}-${doc.filename}`;
+  const filledPath = path.join(__dirname, '../uploads/filled', filledFilename);
+  
+  // Ensure the filled directory exists
+  const dir = path.dirname(filledPath);
+  if (!fs.existsSync(dir)) {
+    fs.mkdirSync(dir, { recursive: true });
+  }
+  
   // Check if XFA form and handle accordingly
   const isPureXfa = doc.type === 'XFA' || (doc.hasXfa && (!doc.fields || doc.fields.length === 0));
   const isHybridXfa = doc.hasXfa && doc.fields && doc.fields.length > 0;
   
   if (isPureXfa) {
-    // Pure XFA forms cannot be filled with pdf-lib
-    // Check if Adobe PDF Services API is configured
-    if (!process.env.ADOBE_PDF_SERVICES_CLIENT_ID || !process.env.ADOBE_PDF_SERVICES_CLIENT_SECRET) {
-      throw new Error(
-        'This template uses pure XFA forms (e.g., LiveCycle/IMM 1295). ' +
-        'To autofill these forms, configure Adobe PDF Services API credentials in backend .env: ' +
-        'ADOBE_PDF_SERVICES_CLIENT_ID and ADOBE_PDF_SERVICES_CLIENT_SECRET. ' +
-        'Get credentials from: https://developer.adobe.com/document-services/docs/overview/pdf-services-api/'
-      );
-    }
-    // If Adobe PDF Services is configured, use it for XFA autofill
-    logger.info('Using Adobe PDF Services API for XFA form autofill');
+    // Pure XFA forms - use XML-based injection
+    logger.info('Using XML-based XFA injection for pure XFA form');
     return await autofillXfaDocument(doc, user, fieldMap, filledPath);
   }
   
   if (isHybridXfa) {
-    // Hybrid XFA/AcroForm - pdf-lib can handle this by stripping XFA
-    logger.info('Hybrid XFA/AcroForm detected - will strip XFA and fill AcroForm fields');
+    // Hybrid XFA/AcroForm - use XML injection for XFA part, pdf-lib for AcroForm
+    logger.info('Hybrid XFA/AcroForm detected - will use XML injection for XFA data');
+    return await autofillXfaDocument(doc, user, fieldMap, filledPath);
   }
   
   // 1. Map user profile values to PDF form keys
@@ -69,17 +66,7 @@ const autofillDocument = async (documentId, userId) => {
     }
   });
   
-  // 2. Generate a unique output file path
-  const filledFilename = `filled-${Date.now()}-${doc.filename}`;
-  const filledPath = path.join(__dirname, '../uploads/filled', filledFilename);
-  
-  // Ensure the filled directory exists
-  const dir = path.dirname(filledPath);
-  if (!fs.existsSync(dir)) {
-    fs.mkdirSync(dir, { recursive: true });
-  }
-  
-  // 3. Inject form fields using pdf-lib
+  // 2. Inject form fields using pdf-lib
   await injectData(doc.path, injectValues, filledPath);
   
   logger.info(`Autofill complete. Generated file saved at: ${filledPath}`);
@@ -87,8 +74,6 @@ const autofillDocument = async (documentId, userId) => {
 };
 
 const autofillXfaDocument = async (doc, user, fieldMap, outputPath) => {
-  const fs = require('fs');
-  const path = require('path');
   const { PDFDocument } = require('pdf-lib');
   const { injectXfaData } = require('../utils/xfaInjector');
   const logger = require('../utils/logger');
@@ -139,5 +124,5 @@ const autofillXfaDocument = async (doc, user, fieldMap, outputPath) => {
 };
 
 module.exports = {
-  autofillDocument
+  autofillDocument,
 };

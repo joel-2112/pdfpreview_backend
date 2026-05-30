@@ -1,11 +1,7 @@
 const { PDFDocument, PDFName, PDFDict } = require('pdf-lib');
 const fs = require('fs');
+const { extractXfaFields } = require('./xfaInjector');
 
-/**
- * Parses a PDF file to detect form type and extract form fields.
- * @param {string} filePath - Absolute path to the PDF file
- * @returns {Promise<{type: string, fields: Array<{name: string, type: string, value: string}>}>}
- */
 const pickPdfInfoString = (pdfString, key) => {
   const paren = pdfString.match(new RegExp(`/${key}\\s*\\(([^)]*)\\)`));
   if (paren) {

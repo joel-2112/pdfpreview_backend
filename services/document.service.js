@@ -5,11 +5,6 @@ const FieldMap = require('../models/FieldMap.model');
 const { analyzePdf } = require('./pdf.service');
 const { deleteFile } = require('../utils/fileHelper');
 const { getFlattenedPath } = require('./xfaPreview.service');
-const {
-  scheduleHtmlConversion,
-  documentNeedsHtmlForm,
-  getHtmlOutputDir,
-} = require('./formvuHtml.service');
 const logger = require('../utils/logger');
 
 const uploadDocument = async (file, userId) => {
@@ -46,12 +41,6 @@ const uploadDocument = async (file, userId) => {
       mappings: {}
     });
     await fieldMap.save();
-
-    if (documentNeedsHtmlForm(document)) {
-      document.htmlFormStatus = 'pending';
-      await document.save();
-      scheduleHtmlConversion(document._id, userId);
-    }
     
     logger.info(`Successfully stored and parsed document metadata: ${document._id}`);
     return document;
@@ -90,12 +79,6 @@ const reanalyzeDocument = async (id, userId) => {
   doc.pdfProducer = analysis.pdfProducer || null;
   doc.fields = analysis.fields;
   await doc.save();
-
-  if (documentNeedsHtmlForm(doc)) {
-    doc.htmlFormStatus = 'pending';
-    await doc.save();
-    scheduleHtmlConversion(doc._id, userId);
-  }
 
   return doc;
 };
