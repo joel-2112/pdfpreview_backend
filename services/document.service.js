@@ -83,8 +83,6 @@ const reanalyzeDocument = async (id, userId) => {
   return doc;
 };
 
-
-
 const getDocuments = async (userId) => {
   return await Document.find({ user: userId }).sort({ createdAt: -1 });
 };
