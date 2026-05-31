@@ -72,7 +72,7 @@ const getMe = async (req, res, next) => {
     next(error);
   }
 };
-
+//the update profile
 const updateProfileData = async (req, res, next) => {
   try {
     const user = await User.findById(req.user.id);
