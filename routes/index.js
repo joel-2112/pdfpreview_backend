@@ -8,7 +8,7 @@ const router = express.Router();
 
 router.use('/auth', authRoutes);
 router.use('/documents', documentRoutes);
-router.use('xfa', xfaRoutes)
+router.use('/xfa', xfaRoutes)
 router.use('/autofill', autofillRoutes);
 
 module.exports = router;
