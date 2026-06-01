@@ -8,10 +8,10 @@ const Document = require('../models/Document.model');
 const previewXfaWithFormVu = async (req, res, next) => {
     try {
         const { documentId } = req.params;
-        const userId = req.user.id;
+        // const userId = req.user.id;
 
         // Retrieve the document from your database
-        const doc = await Document.findOne({ _id: documentId, user: userId });
+        const doc = await Document.findOne({ _id: documentId});
         if (!doc) {
             return errorResponse(res, 'Document not found', 404);
         }
