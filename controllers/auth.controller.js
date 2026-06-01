@@ -20,10 +20,17 @@ const register = async (req, res, next) => {
     user = await User.create({ name, email, password });
     const token = generateToken(user._id);
     
+    // Set cookie instead of returning token in body
+    res.cookie('token', token, {
+      httpOnly: true,
+      secure: process.env.NODE_ENV === 'production',
+      sameSite: 'lax',
+      maxAge: 24 * 60 * 60 * 1000
+    });
+    
     return successResponse(
       res,
       {
-        token,
         user: { id: user._id, name: user.name, email: user.email }
       },
       'User registered successfully.',
@@ -33,7 +40,6 @@ const register = async (req, res, next) => {
     next(error);
   }
 };
-
 const login = async (req, res, next) => {
   try {
     const { email, password } = req.body;
@@ -51,14 +57,37 @@ const login = async (req, res, next) => {
     
     const token = generateToken(user._id);
     
+    // Set cookie instead of returning token in body
+    res.cookie('token', token, {
+      httpOnly: true,           // Cannot be accessed by JavaScript
+      secure: process.env.NODE_ENV === 'production', // HTTPS only in production
+      sameSite: 'lax',          // CSRF protection
+      maxAge: 24 * 60 * 60 * 1000 // 24 hours (matches JWT_EXPIRE)
+    });
+    
+    // Return user data WITHOUT token
     return successResponse(
       res,
       {
-        token,
         user: { id: user._id, name: user.name, email: user.email }
       },
       'User logged in successfully.'
     );
+  } catch (error) {
+    next(error);
+  }
+};
+const logout = async (req, res, next) => {
+  try {
+    // Clear the token cookie
+    res.cookie('token', '', {
+      httpOnly: true,
+      secure: process.env.NODE_ENV === 'production',
+      sameSite: 'lax',
+      expires: new Date(0) // Expire immediately
+    });
+    
+    return successResponse(res, null, 'User logged out successfully.');
   } catch (error) {
     next(error);
   }
@@ -97,6 +126,7 @@ const updateProfileData = async (req, res, next) => {
 module.exports = {
   register,
   login,
+  logout,
   getMe,
   updateProfileData
 };

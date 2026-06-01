@@ -5,7 +5,12 @@ const { errorResponse } = require('../utils/apiResponse');
 const protect = async (req, res, next) => {
   let token;
   
-  if (req.headers.authorization && req.headers.authorization.startsWith('Bearer')) {
+  // First try to get token from cookie
+  if (req.cookies && req.cookies.token) {
+    token = req.cookies.token;
+  }
+  // Fallback to Authorization header (for backward compatibility)
+  else if (req.headers.authorization && req.headers.authorization.startsWith('Bearer')) {
     token = req.headers.authorization.split(' ')[1];
   }
   
@@ -14,7 +19,7 @@ const protect = async (req, res, next) => {
       const { deleteFile } = require('../utils/fileHelper');
       deleteFile(req.file.path);
     }
-    return errorResponse(res, 'Not authorized to access this route. Missing bearer token.', 401);
+    return errorResponse(res, 'Not authorized to access this route. Missing token.', 401);
   }
   
   try {

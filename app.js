@@ -4,7 +4,7 @@ const cors = require('cors');
 const apiRoutes = require('./routes');
 const errorHandler = require('./middleware/error.middleware');
 const path = require('path');
-
+const cookieParser = require('cookie-parser');
 const app = express();
 
 // Security headers – disable frameguard for FormVu iframe preview
@@ -39,6 +39,8 @@ const corsOptions = {
 
 app.options('*', cors(corsOptions));
 app.use(cors(corsOptions));
+app.use(cookieParser());
+
 
 // Body parsers
 app.use(express.json());

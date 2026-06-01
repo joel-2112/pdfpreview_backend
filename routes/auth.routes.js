@@ -1,6 +1,6 @@
 const express = require('express');
 const { body } = require('express-validator');
-const { register, login, getMe, updateProfileData } = require('../controllers/auth.controller');
+const { register, login, getMe, updateProfileData, logout } = require('../controllers/auth.controller');
 const { protect } = require('../middleware/auth.middleware');
 const { validate } = require('../middleware/validate.middleware');
 
@@ -24,6 +24,8 @@ router.post(
   ]),
   login
 );
+
+router.post('logout', logout)
 
 router.get('/me', protect, getMe);
 
