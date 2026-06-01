@@ -9,6 +9,7 @@
     "test": "jest --runInBand --detectOpenHandles"
   },
   "dependencies": {
+    "@idrsolutions/idrcloudclient": "^4.4.2",
     "axios": "^1.16.1",
     "bcryptjs": "^2.4.3",
     "cors": "^2.8.5",
