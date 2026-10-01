@@ -85,11 +85,13 @@ const parsePdf = async (filePath) => {
     return { name, type: fieldType, value };
   });
 
-  if (type === 'XFA' && extractedFields.length === 0) {
+  if ((type === 'XFA' || hasXfa) && extractedFields.length === 0) {
     try {
       const { extractXfaFields } = require('./pdfTypeDetect');
-      const xfaFields = await extractXfaFields(pdfDoc);
-      extractedFields = xfaFields;
+      const xfaFields = await extractXfaFields(pdfDoc, pdfBytes);
+      if (xfaFields && xfaFields.length > 0) {
+        extractedFields = xfaFields;
+      }
     } catch (err) {
       console.warn('Could not extract pure XFA fields:', err.message);
     }

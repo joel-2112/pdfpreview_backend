@@ -44,9 +44,11 @@ describe('Document REST Endpoints Integration Tests', () => {
         email: 'alex@example.com',
         password: 'password123'
       });
-      
-    token = regRes.body.data.token;
     userRecord = regRes.body.data.user;
+    const jwt = require('jsonwebtoken');
+    token = jwt.sign({ id: userRecord.id }, process.env.JWT_SECRET || 'jwt_secret_test_key_for_testing_123', {
+      expiresIn: '1d'
+    });
   });
 
   afterAll(async () => {
@@ -167,8 +169,10 @@ describe('Document REST Endpoints Integration Tests', () => {
       expect(linkRes.body.data.signedUrl).toContain('/api/documents/secure-view?token=');
 
       // Attempt to fetch file from secure view streaming endpoint
+      const signedUrlObj = new URL(linkRes.body.data.signedUrl);
+      const urlPath = signedUrlObj.pathname + signedUrlObj.search;
       const streamRes = await request(app)
-        .get(linkRes.body.data.signedUrl);
+        .get(urlPath);
 
       expect(streamRes.status).toBe(200);
       expect(streamRes.headers['content-type']).toBe('application/pdf');
