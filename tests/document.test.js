@@ -54,28 +54,7 @@ describe('Document REST Endpoints Integration Tests', () => {
   afterAll(async () => {
     // Purge temp file
     if (fs.existsSync(testPdfPath)) {
-      fs.unlinkSync(testPdfPath);
-    }
-    
-    // Purge any dynamically created uploads
-    const uploadsDir = path.join(__dirname, '../uploads/originals');
-    if (fs.existsSync(uploadsDir)) {
-      const files = fs.readdirSync(uploadsDir);
-      files.forEach(file => {
-        if (file.startsWith('pdf-')) {
-          fs.unlinkSync(path.join(uploadsDir, file));
-        }
-      });
-    }
-
-    const filledDir = path.join(__dirname, '../uploads/filled');
-    if (fs.existsSync(filledDir)) {
-      const files = fs.readdirSync(filledDir);
-      files.forEach(file => {
-        if (file.startsWith('filled-')) {
-          fs.unlinkSync(path.join(filledDir, file));
-        }
-      });
+      try { fs.unlinkSync(testPdfPath); } catch (_) {}
     }
 
     await mongoose.disconnect();
