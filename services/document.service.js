@@ -83,7 +83,9 @@ const reanalyzeDocument = async (id, userId) => {
 };
 
 const getDocuments = async (userId) => {
-  return await Document.find({ user: userId }).sort({ createdAt: -1 });
+  const docs = await Document.find({ user: userId }).sort({ createdAt: -1 });
+  const { syncDocumentXfaMetadata } = require('../utils/pdfTypeDetect');
+  return await Promise.all(docs.map(doc => syncDocumentXfaMetadata(doc)));
 };
 
 const deleteDocument = async (id, userId) => {

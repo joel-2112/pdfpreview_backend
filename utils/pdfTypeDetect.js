@@ -117,7 +117,7 @@ const extractXfaFields = async (pdfDoc, pdfBytes) => {
 };
 
 /**
- * Repair MongoDB metadata for uploads that pre-date XFA detection fields.
+ * Repair MongoDB metadata for uploads that pre-date XFA detection fields or were misclassified.
  */
 const syncDocumentXfaMetadata = async (doc) => {
   const absolutePath = path.isAbsolute(doc.path)
@@ -129,30 +129,44 @@ const syncDocumentXfaMetadata = async (doc) => {
   }
 
   const { isXfa, liveCycle, immForm } = scanPdfHeader(absolutePath);
-  if (!isXfa && !liveCycle && !immForm) {
+
+  // If already properly recognized and has fields, return
+  if (doc.type === 'XFA' && doc.hasXfa && doc.fields && doc.fields.length > 0) {
     return doc;
   }
 
-  let changed = false;
-
-  if (!doc.hasXfa) {
-    doc.hasXfa = true;
-    changed = true;
-  }
-  if (liveCycle && doc.xfaEngine !== 'livecycle') {
-    doc.xfaEngine = 'livecycle';
-    changed = true;
-  } else if (isXfa && !doc.xfaEngine) {
-    doc.xfaEngine = 'generic';
-    changed = true;
-  }
-  if ((isXfa || liveCycle || immForm) && doc.type !== 'XFA') {
-    doc.type = 'XFA';
-    changed = true;
-  }
-
-  if (changed) {
-    await doc.save();
+  // If detected via header scan or if misclassified as flat
+  if (isXfa || liveCycle || immForm || doc.type === 'flat' || !doc.fields || doc.fields.length === 0) {
+    try {
+      const { parsePdf } = require('./pdfParser');
+      const analysis = await parsePdf(absolutePath);
+      if (analysis) {
+        let changed = false;
+        if (analysis.hasXfa && !doc.hasXfa) {
+          doc.hasXfa = true;
+          changed = true;
+        }
+        if (analysis.type && doc.type !== analysis.type) {
+          doc.type = analysis.type;
+          changed = true;
+        }
+        if (analysis.xfaEngine && doc.xfaEngine !== analysis.xfaEngine) {
+          doc.xfaEngine = analysis.xfaEngine;
+          changed = true;
+        }
+        if (analysis.pdfTitle && !doc.pdfTitle) {
+          doc.pdfTitle = analysis.pdfTitle;
+          changed = true;
+        }
+        if (analysis.fields && analysis.fields.length > 0 && (!doc.fields || doc.fields.length === 0)) {
+          doc.fields = analysis.fields;
+          changed = true;
+        }
+        if (changed) {
+          await doc.save();
+        }
+      }
+    } catch (e) {}
   }
 
   return doc;
