@@ -41,27 +41,115 @@ const parsePdf = async (filePath) => {
       const xfaEngine = isLiveCycle ? 'livecycle' : (isXfa ? 'generic' : null);
 
       let extractedFields = [];
+      const radioGroups = new Map();
+      const seenNames = new Set();
+
+      const formatFieldLabel = (ariaLabel, dataId, fieldId) => {
+        if (ariaLabel && ariaLabel.trim()) {
+          return ariaLabel.trim().replace(/\s+/g, ' ');
+        }
+        if (dataId) {
+          return dataId.replace(/\d+$/, '').replace(/([A-Z])/g, ' $1').trim();
+        }
+        return fieldId || 'Field';
+      };
 
       // 1. Extract from allXfaHtml if XFA
       if (isXfa || isLiveCycle) {
         if (doc.allXfaHtml) {
-          const walk = (node) => {
+          const walk = (node, parentLabel = '') => {
             if (!node || typeof node !== 'object') return;
+
+            let currentLabel = node.attributes?.['aria-label'] || node.attributes?.title || parentLabel;
+
             if (node.name === 'input' || node.name === 'select' || node.name === 'textarea') {
-              const name = node.attributes?.['data-element-id'] || node.attributes?.id || node.attributes?.name;
-              if (name) {
+              const type = node.name === 'input' ? (node.attributes?.type || 'text') : node.name;
+              const dataId = node.attributes?.dataId;
+              const fieldId = node.attributes?.fieldId;
+              const nameAttr = node.attributes?.name;
+              const ariaLabel = node.attributes?.['aria-label'] || '';
+
+              const identifier = dataId || nameAttr || fieldId || node.attributes?.id;
+
+              if (type === 'radio') {
+                const groupKey = dataId || nameAttr || 'radio_group';
+                if (!radioGroups.has(groupKey)) {
+                  let cleanGroupLabel = ariaLabel
+                    .replace(/^Indicate (Yes|No) to (the )?/i, '')
+                    .replace(/^Indicate /i, '')
+                    .trim();
+                  if (!cleanGroupLabel && dataId) {
+                    cleanGroupLabel = formatFieldLabel('', dataId, fieldId);
+                  }
+                  radioGroups.set(groupKey, {
+                    name: groupKey,
+                    dataId: dataId || groupKey,
+                    fieldId: fieldId || '',
+                    type: 'radio',
+                    label: cleanGroupLabel || groupKey,
+                    options: [],
+                    value: '',
+                  });
+                }
+                const group = radioGroups.get(groupKey);
+                const optLabel = ariaLabel.startsWith('Indicate Yes')
+                  ? 'Yes'
+                  : ariaLabel.startsWith('Indicate No')
+                  ? 'No'
+                  : (node.attributes?.xfaOn || 'Selected');
+                const optVal = node.attributes?.xfaOn || 'Y';
+                if (!group.options.some((o) => o.value === optVal)) {
+                  group.options.push({ label: optLabel, value: optVal });
+                }
+                return;
+              }
+
+              // Collect select options
+              let choices = [];
+              if (node.name === 'select' && Array.isArray(node.children)) {
+                node.children.forEach((opt) => {
+                  if (opt.name === 'option') {
+                    const optVal = opt.attributes?.value || '';
+                    const optText = (opt.children && opt.children[0] && typeof opt.children[0] === 'string') ? opt.children[0] : optVal;
+                    if (optVal || optText) {
+                      choices.push({ value: optVal, label: optText });
+                    }
+                  }
+                });
+              }
+
+              if (identifier && !seenNames.has(identifier)) {
+                seenNames.add(identifier);
+                const cleanLabel = formatFieldLabel(ariaLabel, dataId, fieldId);
+
                 extractedFields.push({
-                  name,
-                  type: node.name === 'input' ? (node.attributes?.type || 'text') : node.name,
+                  name: identifier,
+                  dataId: dataId || identifier,
+                  fieldId: fieldId || '',
+                  label: cleanLabel,
+                  type: type === 'select' ? 'choice' : (type === 'textarea' ? 'text' : type),
                   value: node.attributes?.value || '',
+                  choices: choices.length > 0 ? choices : undefined,
+                  required: Boolean(node.attributes?.required || node.attributes?.['aria-required']),
+                  maxLength: node.attributes?.maxLength || null,
                 });
               }
             }
+
             if (Array.isArray(node.children)) {
-              node.children.forEach(walk);
+              node.children.forEach((c) => walk(c, currentLabel));
             }
           };
+
           walk(doc.allXfaHtml);
+
+          // Append collected radio groups
+          for (const group of radioGroups.values()) {
+            if (!seenNames.has(group.name)) {
+              seenNames.add(group.name);
+              extractedFields.push(group);
+            }
+          }
         }
       }
 
@@ -71,10 +159,13 @@ const parsePdf = async (filePath) => {
           const page = await doc.getPage(i);
           const annots = await page.getAnnotations();
           for (const a of annots) {
-            if (a.fieldName) {
+            if (a.fieldName && !seenNames.has(a.fieldName)) {
+              seenNames.add(a.fieldName);
               extractedFields.push({
                 name: a.fieldName,
-                type: a.fieldType || 'text',
+                dataId: a.fieldName,
+                label: a.alternativeText || a.fieldName,
+                type: a.fieldType ? a.fieldType.toLowerCase() : 'text',
                 value: a.fieldValue || '',
               });
             }

@@ -52,7 +52,20 @@ const documentSchema = new mongoose.Schema({
   fields: [{
     name: { type: String, required: true },
     type: { type: String, required: true }, // e.g. 'text', 'checkbox', 'radio', 'choice', 'button', 'unknown'
-    value: { type: String, default: '' }
+    value: { type: String, default: '' },
+    label: { type: String, default: '' },
+    dataId: { type: String, default: '' },
+    fieldId: { type: String, default: '' },
+    choices: [{
+      value: { type: String },
+      label: { type: String }
+    }],
+    options: [{
+      value: { type: String },
+      label: { type: String }
+    }],
+    required: { type: Boolean, default: false },
+    maxLength: { type: Number, default: null },
   }],
   size: {
     type: Number,

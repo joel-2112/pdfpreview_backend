@@ -130,13 +130,14 @@ const syncDocumentXfaMetadata = async (doc) => {
 
   const { isXfa, liveCycle, immForm } = scanPdfHeader(absolutePath);
 
-  // If already properly recognized and has fields, return
-  if (doc.type === 'XFA' && doc.hasXfa && doc.fields && doc.fields.length > 0) {
+  // If already properly recognized and has rich fields, return
+  const hasRichFields = doc.fields && doc.fields.length > 0 && doc.fields.some(f => f.label && f.label !== f.name);
+  if (doc.type === 'XFA' && doc.hasXfa && hasRichFields && doc.fields.length > 50) {
     return doc;
   }
 
-  // If detected via header scan or if misclassified as flat
-  if (isXfa || liveCycle || immForm || doc.type === 'flat' || !doc.fields || doc.fields.length === 0) {
+  // If detected via header scan, or misclassified as flat, or missing rich field definitions
+  if (isXfa || liveCycle || immForm || doc.type === 'flat' || !doc.fields || doc.fields.length === 0 || !hasRichFields) {
     try {
       const { parsePdf } = require('./pdfParser');
       const analysis = await parsePdf(absolutePath);
@@ -158,7 +159,7 @@ const syncDocumentXfaMetadata = async (doc) => {
           doc.pdfTitle = analysis.pdfTitle;
           changed = true;
         }
-        if (analysis.fields && analysis.fields.length > 0 && (!doc.fields || doc.fields.length === 0)) {
+        if (analysis.fields && analysis.fields.length > 0) {
           doc.fields = analysis.fields;
           changed = true;
         }
